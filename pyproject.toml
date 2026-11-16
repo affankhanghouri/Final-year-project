@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "homesense"
+version = "0.1.0"
+description = "Task-driven local perception for the HomeSense FYP1 project"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy==2.5.4",
+    "opencv-python==5.0.0.93",
+    "ultralytics==8.4.214",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["homesense*"]
+namespaces = false

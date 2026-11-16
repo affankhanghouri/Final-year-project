@@ -2,3 +2,21 @@ venv/
 .venv/
 __pycache__/
 *.py[cod]
+/models
+/test_images/
+*.pt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+/experiments.ipynb
+docs/
+# Packaging metadata and generated artifacts
+*.egg-info/
+/build/
+/dist/
+/runs/
+/outputs/
+.coverage
+htmlcov/
+AGENTS.md
