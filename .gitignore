@@ -10,7 +10,6 @@ __pycache__/
 .ruff_cache/
 .ipynb_checkpoints/
 /experiments.ipynb
-docs/
 # Packaging metadata and generated artifacts
 *.egg-info/
 /build/
@@ -20,3 +19,54 @@ docs/
 .coverage
 htmlcov/
 AGENTS.md
+# Explicit-consent private speech trials and local native ASR build
+/recordings/
+/tools/whisper.cpp/
+
+# Local documentation and agent/workstation state (retain on disk)
+*.md
+*.mdx
+*.MD
+*.MDX
+/.agents/
+/.codex/
+/.aws/
+# Private environment and credential material
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+*service-account*.json
+# Downloaded data/models and generated media
+*.pth
+*.onnx
+*.tflite
+*.gguf
+*.bin
+*.zip
+*.tar
+*.tar.gz
+/datasets/
+/data/
+/checkpoints/
+*.wav
+*.mp3
+*.mp4
+*.avi
+*.log
+*.jsonl
+.DS_Store
+# Local capture/evaluation assets; keep source-level fixtures explicitly reviewed
+*.png
+*.jpg
+*.jpeg
+*.webp
+*.bmp
+*.mov
+*.flac
+*.ogg
+# Historical recording instructions, not runtime configuration
+/docs/speech-phase2-recording-plan.json

@@ -55,12 +55,20 @@ class BufferTests(unittest.TestCase):
     def test_concurrent_reads_never_expose_partial_images(self) -> None:
         buffer = LatestFrameBuffer()
         failures = []
+        observed = threading.Event()
+
         def producer() -> None:
             for i in range(1, 101):
                 buffer.publish(Frame(i, float(i), np.full((100, 100), i, dtype=np.uint8)))
+                if i % 10 == 0:
+                    if not observed.wait(1):
+                        failures.append("consumer did not observe checkpoint")
+                        return
+                    observed.clear()
         thread = threading.Thread(target=producer)
         thread.start()
         last = 0
+        reads = 0
         while last < 100:
             result = buffer.wait_for_newer(last, timeout=1)
             if result is None:
@@ -69,9 +77,13 @@ class BufferTests(unittest.TestCase):
             if not np.all(result.image == result.frame_id):
                 failures.append("partial frame")
             last = result.frame_id
+            reads += 1
+            if last % 10 == 0:
+                observed.set()
         thread.join(1)
         self.assertFalse(thread.is_alive())
         self.assertEqual(failures, [])
+        self.assertGreaterEqual(reads, 10)
 
 
 class FakeSource:

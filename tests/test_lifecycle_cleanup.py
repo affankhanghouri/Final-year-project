@@ -1,10 +1,12 @@
 """Regression tests for partial startup and shutdown failures; no hardware needed."""
 
 from contextlib import ExitStack
+import sys
+import threading
 import unittest
 from unittest.mock import Mock, patch
 
-from homesense.camera import CameraWorker, LatestFrameBuffer
+from homesense.camera import CameraWorker, Frame, LatestFrameBuffer
 from homesense.perception import DetectionWorker, WorkerStats
 from homesense.session import SessionManager
 from scripts import live_detection_preview as preview
@@ -54,11 +56,68 @@ class StartupFailureTests(unittest.TestCase):
 
         source.read.side_effect = read
         worker = CameraWorker(buffer, source_factory=lambda _: source)
-        worker.start()
-        self.assertIsNone(buffer.wait_for_newer(timeout=1))
-        self.assertTrue(worker.stop(1))
+        with self.assertLogs("homesense.camera", level="ERROR") as logs:
+            worker.start()
+            try:
+                self.assertIsNone(buffer.wait_for_newer(timeout=1))
+            finally:
+                self.assertTrue(worker.stop(1))
+        self.assertIs(logs.records[0].exc_info[1], failure)
         self.assertIs(worker.error, failure)
         source.release.assert_called_once_with()
+
+    def test_camera_initialization_error_survives_release_error(self):
+        buffer = LatestFrameBuffer()
+        source = Mock()
+        primary = RuntimeError("camera initialization failed")
+        source.isOpened.side_effect = primary
+        secondary = RuntimeError("release also failed")
+        source.release.side_effect = secondary
+        worker = CameraWorker(buffer, source_factory=lambda _: source)
+        with self.assertLogs("homesense.camera", level="ERROR") as logs:
+            worker.start()
+            try:
+                self.assertIsNone(buffer.wait_for_newer(timeout=1))
+            finally:
+                self.assertTrue(worker.stop(1))
+        self.assertIs(worker.error, primary)
+        self.assertIs(logs.records[0].exc_info[1], secondary)
+        source.read.assert_not_called()
+        source.release.assert_called_once_with()
+        self.assertTrue(buffer.closed)
+
+    def test_inference_exception_after_stop_is_retained(self):
+        import numpy as np
+
+        sessions = SessionManager(clock=lambda: 100.0)
+        session = sessions.start("phone", 60)
+        buffer = LatestFrameBuffer()
+        entered, release = threading.Event(), threading.Event()
+        failure = RuntimeError("prediction failed during shutdown")
+
+        def predict(image):
+            entered.set()
+            if not release.wait(2):
+                raise RuntimeError("test did not release inference")
+            raise failure
+
+        detector = Mock()
+        detector.predict.side_effect = predict
+        worker = DetectionWorker(buffer, detector, sessions, session, clock=lambda: 100.0)
+        buffer.publish(Frame(1, 100.0, np.zeros((2, 2, 3), dtype=np.uint8)))
+        worker.start()
+        try:
+            self.assertTrue(entered.wait(1))
+            self.assertFalse(worker.stop(0))
+            self.assertIsNone(worker.error)
+        finally:
+            release.set()
+            buffer.close()
+            self.assertTrue(worker.stop(1))
+        self.assertTrue(worker.finished)
+        self.assertIs(worker.error, failure)
+        self.assertIsNone(worker.latest_result())
+        self.assertEqual(worker.stats.published, 0)
 
 
 class PreviewCleanupTests(unittest.TestCase):
@@ -123,6 +182,19 @@ class PreviewCleanupTests(unittest.TestCase):
     def test_partial_startup_failure_still_cleans_both_workers(self):
         self.inference.start.side_effect = RuntimeError("cannot start thread")
         self.assertEqual(preview.main(), 1)
+        self.assert_all_cleanup_attempted()
+
+    def test_startup_error_is_reported_before_independent_cleanup_errors(self):
+        primary = RuntimeError("cannot start inference thread")
+        cleanup_error = RuntimeError("camera stop also failed")
+        self.inference.start.side_effect = primary
+        self.camera.stop.side_effect = cleanup_error
+        reported = []
+        # Capture the active exception, not just whether a logging call occurred.
+        with patch.object(preview.logging, "exception",
+                          side_effect=lambda *args: reported.append(sys.exc_info()[1])):
+            self.assertEqual(preview.main(), 1)
+        self.assertEqual(reported, [primary, cleanup_error])
         self.assert_all_cleanup_attempted()
 
     def test_bounded_stop_failure_is_explicit(self):

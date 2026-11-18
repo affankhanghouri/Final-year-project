@@ -1,2 +1,2 @@
-# Compatibility entry point; dependency versions live in pyproject.toml.
--e .
+# Compatibility entry point; versions are owned by pyproject.toml.
+-e .[voice]

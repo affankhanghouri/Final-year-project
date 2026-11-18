@@ -14,6 +14,8 @@ class SessionStatus(str, Enum):
     ACTIVE = "active"
     CANCELLED = "cancelled"
     TIMED_OUT = "timed_out"
+    COMPLETED = "completed"
+    EXHAUSTED = "exhausted"
 
 
 class Target(str, Enum):
@@ -49,8 +51,8 @@ class SessionManager:
             self._expire_if_needed()
             return self._current
 
-    def start(self, target: str, timeout_seconds: float) -> SearchSession:
-        """Start a search, replacing any active search after validation."""
+    def validate_request(self, target: str, timeout_seconds: float) -> Target:
+        """Validate without replacing a session, for resource-owning callers."""
         if not isinstance(target, str):
             raise ValueError("target must be phone, keys, or wallet")
         try:
@@ -62,11 +64,22 @@ class SessionManager:
         if not math.isfinite(timeout_seconds) or timeout_seconds <= 0:
             raise ValueError("timeout must be a positive finite number of seconds")
 
+        self._deadline(self._clock(), timeout_seconds)
+        return normalized_target
+
+    @staticmethod
+    def _deadline(now: float, timeout_seconds: float) -> float:
+        deadline = now + timeout_seconds
+        if not math.isfinite(deadline) or deadline <= now:
+            raise ValueError("timeout cannot be represented as a future deadline")
+        return deadline
+
+    def start(self, target: str, timeout_seconds: float) -> SearchSession:
+        """Start a search, replacing any active search after validation."""
+        normalized_target = self.validate_request(target, timeout_seconds)
         with self._lock:
             now = self._clock()
-            deadline = now + timeout_seconds
-            if not math.isfinite(deadline) or deadline <= now:
-                raise ValueError("timeout cannot be represented as a future deadline")
+            deadline = self._deadline(now, timeout_seconds)
             self._expire_if_needed(now)
             self._current = SearchSession(uuid4(), normalized_target, now, deadline, SessionStatus.ACTIVE)
             return self._current
@@ -82,6 +95,16 @@ class SessionManager:
             self._current = replace(self._current, status=SessionStatus.CANCELLED)
             return True
 
+    def complete(self, session_id: UUID) -> bool:
+        """Complete only a matching active search after explicit user confirmation."""
+        with self._lock:
+            self._expire_if_needed()
+            if (self._current is None or self._current.session_id != session_id
+                    or self._current.status is not SessionStatus.ACTIVE):
+                return False
+            self._current = replace(self._current, status=SessionStatus.COMPLETED)
+            return True
+
     def is_eligible(self, session_id: UUID) -> bool:
         """Check eligibility at result delivery time, including the deadline."""
         with self._lock:
@@ -91,6 +114,16 @@ class SessionManager:
                 and self._current.session_id == session_id
                 and self._current.status is SessionStatus.ACTIVE
             )
+
+    def exhaust(self, session_id: UUID) -> bool:
+        """End a bounded local scan attempt, without claiming a successful find."""
+        with self._lock:
+            self._expire_if_needed()
+            if (self._current is None or self._current.session_id != session_id
+                    or self._current.status is not SessionStatus.ACTIVE):
+                return False
+            self._current = replace(self._current, status=SessionStatus.EXHAUSTED)
+            return True
 
     def _expire_if_needed(self, now: float | None = None) -> None:
         if self._current is None or self._current.status is not SessionStatus.ACTIVE:

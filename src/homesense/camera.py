@@ -1,6 +1,8 @@
 """Camera capture and a single-latest-frame handoff."""
 
 from dataclasses import dataclass
+import logging
+from homesense import diagnostic_logging as diagnostic
 import threading
 import time
 from typing import Callable, Protocol
@@ -86,20 +88,29 @@ class CameraWorker:
         *,
         source_factory: Callable[[int], FrameSource] = _open_camera,
         clock: Callable[[], float] = time.monotonic,
+        diagnostic_session_id=None,
     ) -> None:
         self._buffer = buffer
         self._camera_id = camera_id
         self._source_factory = source_factory
         self._clock = clock
+        self._diagnostic_session_id = diagnostic_session_id
         self._stop = threading.Event()
         self._lock = threading.Lock()
         self._thread: threading.Thread | None = None
         self._error: Exception | None = None
+        self._release_error: Exception | None = None
 
     @property
     def error(self) -> Exception | None:
         with self._lock:
             return self._error
+
+    @property
+    def release_error(self) -> Exception | None:
+        """Expose failed release separately without replacing the primary error."""
+        with self._lock:
+            return self._release_error
 
     def start(self) -> None:
         """Start capture asynchronously; check error when capture ends."""
@@ -135,6 +146,7 @@ class CameraWorker:
             source = self._source_factory(self._camera_id)
             if not source.isOpened():
                 raise RuntimeError(f"could not open camera {self._camera_id}")
+            diagnostic.event('camera', 'camera_ready', self._diagnostic_session_id, camera_id=self._camera_id)
             frame_id = 0
             while not self._stop.is_set():
                 ok, image = source.read()
@@ -147,14 +159,19 @@ class CameraWorker:
                 if not self._buffer.publish(Frame(frame_id, captured_at, image)):
                     break
         except Exception as exc:
+            diagnostic.event('camera', 'camera_error', self._diagnostic_session_id, severity='ERROR', error=str(exc))
             with self._lock:
                 self._error = exc
         finally:
             if source is not None:
                 try:
                     source.release()
+                    diagnostic.event('camera', 'camera_released', self._diagnostic_session_id)
                 except Exception as exc:
                     with self._lock:
+                        self._release_error = exc
                         if self._error is None:
                             self._error = exc
+                    # Preserve the primary error while still reporting release failures.
+                    logging.getLogger(__name__).exception("Camera release failed")
             self._buffer.close()

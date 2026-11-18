@@ -1,0 +1,33 @@
+{
+  "voice": "en_US-ljspeech-medium",
+  "repository": "https://huggingface.co/rhasspy/piper-voices",
+  "revision": "0ca208afc2a2ee102b1e961e72e0a7e4907be3d0",
+  "sample_rate": 22050,
+  "model_card_dataset_license": "public domain",
+  "engine_license": "GPL-3.0-or-later",
+  "training": "from scratch on LJ Speech; see retained model card",
+  "files": [
+    {
+      "file": "MODEL_CARD",
+      "url": "https://huggingface.co/rhasspy/piper-voices/resolve/0ca208afc2a2ee102b1e961e72e0a7e4907be3d0/en/en_US/ljspeech/medium/MODEL_CARD",
+      "bytes": 517,
+      "sha256": "fbee1529c89d36b3fe76d7e9f3f832dce17f44900a52d76a9bda735654766b4d"
+    },
+    {
+      "file": "en_US-ljspeech-medium.onnx.json",
+      "url": "https://huggingface.co/rhasspy/piper-voices/resolve/0ca208afc2a2ee102b1e961e72e0a7e4907be3d0/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx.json",
+      "bytes": 4972,
+      "sha256": "141d612cc0a95ed7efc1ca936b845c2364967f2e9217c5dbfcf69fc4d6c65860"
+    },
+    {
+      "file": "en_US-ljspeech-medium.onnx",
+      "url": "https://huggingface.co/rhasspy/piper-voices/resolve/0ca208afc2a2ee102b1e961e72e0a7e4907be3d0/en/en_US/ljspeech/medium/en_US-ljspeech-medium.onnx",
+      "bytes": 63531379,
+      "sha256": "6f52a751e2349abe7a76735eb09dc1875298c77ea2342ffd2fef79ff81b87f22"
+    }
+  ],
+  "model_author": "Bryce Beattie",
+  "model_license": "public domain",
+  "model_license_source": "https://brycebeattie.com/files/tts/",
+  "dataset_source": "https://keithito.com/LJ-Speech-Dataset/"
+}

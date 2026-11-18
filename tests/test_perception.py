@@ -113,6 +113,8 @@ class PerceptionTests(unittest.TestCase):
         self.detector.release.set()
         self.until(lambda: self.worker.stats.rejected_results == 1)
         self.assertIsNone(self.worker.latest_result())
+        self.assertAlmostEqual(self.worker.stats.last_inference_seconds, 1.0)
+        self.assertAlmostEqual(self.worker.stats.last_result_age, 1.0)
 
     def test_cancel_replace_and_timeout_suppress_inflight_results(self):
         for action in ("cancel", "replace", "timeout"):
@@ -151,6 +153,16 @@ class PerceptionTests(unittest.TestCase):
         self.clock.set(101)
         self.assertIsNone(self.worker.latest_result())
         self.sessions.cancel(self.session.session_id)
+        self.assertIsNone(self.worker.latest_result())
+
+    def test_cancellation_rejects_a_still_fresh_published_result(self):
+        self.begin_inference()
+        self.clock.set(100.1)
+        self.detector.release.set()
+        self.until(lambda: self.worker.stats.published == 1)
+        self.assertIsNotNone(self.worker.latest_result())
+        self.assertTrue(self.sessions.cancel(self.session.session_id))
+        # Clock stays unchanged: cancellation alone must invalidate this result.
         self.assertIsNone(self.worker.latest_result())
 
     def test_stop_suppresses_inflight_result_and_reports_bounded_join(self):

@@ -52,6 +52,8 @@ class WorkerStats:
     rejected_results: int = 0
     published: int = 0
     processed_fps: float = 0.0
+    last_inference_seconds: float = 0.0
+    last_result_age: float = 0.0
 
 
 class DetectionWorker:
@@ -177,6 +179,11 @@ class DetectionWorker:
                 detections = self._detector.predict(frame.image)
                 completed = self._clock()
                 self._count(processed=1)
+                # Diagnostic timings include results rejected by the freshness
+                # gate, so a slow detector does not look like zero-latency work.
+                with self._lock:
+                    self._stats = replace(self._stats, last_inference_seconds=completed - started,
+                                          last_result_age=completed - frame.captured_at)
                 batch = DetectionBatch(
                     self._session.session_id, frame, completed, completed - started,
                     tuple(d for d in detections if d.class_name == self._session.target.value),
